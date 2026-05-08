@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from statistics import mean
+from typing import Any, Dict, List, Sequence, Tuple
+
+from .types import FailureCluster, Trajectory
+
+
+def _l2_distance(a: List[float], b: List[float]) -> float:
+    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+
+@dataclass
+class DiagnosisState:
+    previous_clusters: List[FailureCluster]
+
+
+class FailureDiagnoser:
+    def __init__(self, max_components: int = 15, pca_dim: int = 32, random_state: int = 7) -> None:
+        self.max_components = max_components
+        self.pca_dim = pca_dim
+        self.random_state = random_state
+        self.state = DiagnosisState(previous_clusters=[])
+
+    def descriptor(self, trajectory: Trajectory) -> List[float]:
+        activated = [int(step.activated) for step in trajectory.steps]
+        latencies = [step.latency_ms for step in trajectory.steps]
+        errors = sum(1 for step in trajectory.steps if not step.success)
+        tool_errors = sum(1 for step in trajectory.steps if step.error_code and "tool" in step.error_code)
+        state = trajectory.final_state
+        mode = trajectory.task.metadata["failure_mode"]
+        mode_map = {
+            "ambiguous_goal": [1, 0, 0, 0, 0],
+            "trajectory_drift": [0, 1, 0, 0, 0],
+            "tool_misuse": [0, 0, 1, 0, 0],
+            "subgoal_stall": [0, 0, 0, 1, 0],
+            "answer_error": [0, 0, 0, 0, 1],
+            "clean": [0, 0, 0, 0, 0],
+        }[mode]
+        vector = activated + latencies + [
+            errors,
+            tool_errors,
+            len(state.get("history", [])),
+            float(state.get("plan_quality", 0.0)),
+            float(state.get("tool_quality", 0.0)),
+            float(state.get("context_quality", 0.0)),
+            float(state.get("verification_quality", 0.0)),
+            float(state.get("constraint_quality", 0.0)),
+            float(state.get("recovery_quality", 0.0)),
+            float(trajectory.outcome),
+        ] + mode_map
+        return vector
+
+    def cluster_failures(self, failures: Sequence[Trajectory]) -> Tuple[List[FailureCluster], List[List[float]]]:
+        if not failures:
+            return [], []
+        features = [self.descriptor(item) for item in failures]
+        labels = self._bucket_labels(failures)
+        clusters: List[FailureCluster] = []
+        for label in sorted(set(labels)):
+            member_indices = [idx for idx, candidate_label in enumerate(labels) if candidate_label == label]
+            center = [mean(values) for values in zip(*(features[idx] for idx in member_indices))]
+            signature = self._signature([failures[idx] for idx in member_indices])
+            clusters.append(
+                FailureCluster(
+                    cluster_id=int(label),
+                    member_indices=member_indices,
+                    center=center,
+                    signature=signature,
+                )
+            )
+        self._match_clusters(clusters)
+        return clusters, features
+
+    def _bucket_labels(self, failures: Sequence[Trajectory]) -> List[int]:
+        label_map: Dict[str, int] = {}
+        labels: List[int] = []
+        next_label = 0
+        for item in failures:
+            key = item.failure_type or "unknown_failure"
+            if key not in label_map:
+                label_map[key] = next_label
+                next_label += 1
+            labels.append(label_map[key])
+        return labels
+
+    def _signature(self, items: Sequence[Trajectory]) -> Dict[str, Any]:
+        failure_types = [item.failure_type for item in items if item.failure_type]
+        dominant_failure = max(set(failure_types), key=failure_types.count) if failure_types else "unknown_failure"
+        avg_latency = float(mean([sum(step.latency_ms for step in item.steps) for item in items]))
+        avg_context = float(mean([item.task.metadata.get("context_load", 0) for item in items]))
+        return {
+            "dominant_failure_type": dominant_failure,
+            "avg_latency_ms": avg_latency,
+            "avg_context_load": avg_context,
+            "size": len(items),
+        }
+
+    def _match_clusters(self, current: List[FailureCluster]) -> None:
+        previous = self.state.previous_clusters
+        if not previous or not current:
+            self.state.previous_clusters = current
+            return
+        matched_current = set()
+        for prev_cluster in previous:
+            best_idx = None
+            best_distance = None
+            for idx, cur_cluster in enumerate(current):
+                if idx in matched_current:
+                    continue
+                distance = _l2_distance(prev_cluster.center, cur_cluster.center)
+                if best_distance is None or distance < best_distance:
+                    best_distance = distance
+                    best_idx = idx
+            if best_idx is not None:
+                current[best_idx].stable_cycles = prev_cluster.stable_cycles + 1
+                matched_current.add(best_idx)
+        for idx, cluster in enumerate(current):
+            if idx not in matched_current:
+                cluster.stable_cycles = 1
+        self.state.previous_clusters = current
