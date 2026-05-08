@@ -50,7 +50,7 @@ mechanism for building more adaptive and reliable LLM agent harnesses.
 ### Harness Representation
 
 We define an agent harness $\mathcal{H}$ as a directed acyclic computation
-graph over typed modules representing the \emph{intra-step} computation at
+graph over typed modules representing the *intra-step* computation at
 each agent step; the outer observe--act loop remains a separate recurrent
 structure.
 
@@ -59,9 +59,9 @@ where $\mathcal{O}$ is the module set,
 $\mathcal{E} \subseteq \mathcal{O} \times \mathcal{O}$ the directed edge set,
 $\Theta$ module-level parameters, and $\Phi$ activation functions.
 Each module $o_i$ is a typed tuple
-$(\texttt{name}, \texttt{input\_schema}, \texttt{output\_schema},
-\texttt{executor}, \texttt{side\_effects}, \texttt{budget})$, where
-\texttt{executor} may be an LLM prompt, deterministic function, tool wrapper,
+(`name`, `input_schema`, `output_schema`,
+`executor`, `side_effects`, `budget`), where
+`executor` may be an LLM prompt, deterministic function, tool wrapper,
 or composite routine.
 Each activation function $\phi_i: \mathcal{S} \rightarrow [0,1]$ is
 thresholded deterministically at evaluation time as
@@ -85,7 +85,7 @@ $$
     \mathbb{E}_{\xi \sim \mathcal{H}(\tau)}\left[ r(\xi, \tau) \right].
 $$
 
-A body plan is \textit{empirically under-expressive} on $\mathcal{T}_c$ if,
+A body plan is *empirically under-expressive* on $\mathcal{T}_c$ if,
 after bounded recalibration $\mathcal{R}(\mathcal{B}, \mathcal{T}_c)$
 exhausting a fixed budget, performance remains below threshold $\epsilon_\text{struct}$:
 
@@ -102,8 +102,8 @@ within a specified compute envelope.
 
 ### Development Cycle Overview
 
-HarnessGen alternates between an \textit{execution loop} that runs tasks and
-collects trajectory data, and a \textit{development loop} that analyzes failures
+HarnessGen alternates between an *execution loop* that runs tasks and
+collects trajectory data, and a *development loop* that analyzes failures
 and updates the body plan.
 
 ### Failure Diagnosis
@@ -123,10 +123,10 @@ error codes, and terminal failure type.
 
 Clusters at cycle $k$ are matched to those at cycle $k-1$ via the Hungarian
 algorithm on symmetric KL divergences between fitted Gaussian components.
-A cluster is \emph{persistent} if a matched descendant has been non-empty for
+A cluster is *persistent* if a matched descendant has been non-empty for
 $\kappa$ consecutive cycles.
 
-For each cluster we execute the \textit{bounded recalibration test}, a
+For each cluster we execute the *bounded recalibration test*, a
 structured search over parameter space of existing modules---including
 trajectory-reflective prompt optimization, trigger threshold adjustment,
 routing weight update, and few-shot demonstration selection---within a fixed
@@ -135,7 +135,7 @@ graph topology.
 
 A cluster is a structural-gap candidate when the residual failure gap
 $\Delta_c = \epsilon_\text{struct} - R(\mathcal{B}_k, \hat{\Theta}_\mathcal{R}^{(c)}, \mathcal{T}_c)$
-is positive \emph{and} the cluster is persistent:
+is positive *and* the cluster is persistent:
 
 $$
     \text{SG}(c, k) = \mathbf{1}\!\left[\Delta_c > 0\right] \cdot
@@ -209,8 +209,8 @@ where counterfactual reruns use deterministic decoding and a fixed seed.
 When the signal falls below $u_\text{min}$ for $W$ consecutive cycles,
 the module enters a three-stage lifecycle:
 
-1. \textit{activation decay}
-2. \textit{shadow mode}
-3. \textit{pruning}
+1. *activation decay*
+2. *shadow mode*
+3. *pruning*
 
 Shadow mode confirms that pruning does not degrade performance before removal.
