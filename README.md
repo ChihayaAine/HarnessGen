@@ -43,7 +43,7 @@ mechanism for building more adaptive and reliable LLM agent harnesses.
 
 ## HarnessGen
 
-![HarnessGen Framework](resource/HarnessGen.png)
+![HarnessGen Framework](resource/HarnessGen.pdf)
 
 ## Methodology
 
