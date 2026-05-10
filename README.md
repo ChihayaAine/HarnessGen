@@ -64,19 +64,16 @@ Each module $o_i$ is a typed tuple
 `executor` may be an LLM prompt, deterministic function, tool wrapper,
 or composite routine.
 Each activation function $\phi_i: \mathcal{S} \rightarrow [0,1]$ is
-thresholded deterministically at evaluation time as
-$$
-b_i^t = \mathbf{1}[\phi_i(s_t) \geq \theta_i^{\text{act}}]
-$$
-unifying mandatory and conditionally activated modules within the same
+thresholded deterministically at evaluation time. In plain terms, the module
+is active at step `t` when `phi_i(s_t) >= theta_i_act`, and inactive otherwise.
+This unifies mandatory and conditionally activated modules within the same
 framework.
 
-At each step $t$, the harness resolves the active subgraph
-$\mathcal{G}_t = \{o_i \in \mathcal{O} : b_i^t = 1\}$, executes modules in
-topological order, and passes intermediate states along edges.
-The execution trajectory on task $\tau$ is
-$\xi = (s_0, \mathcal{G}_0, a_0, \ldots, s_T)$, with binary outcome
-$r(\xi, \tau) \in \{0,1\}$.
+At each step `t`, the harness resolves the active subgraph `G_t`, consisting
+of all modules `o_i` whose activation bit `b_i^t` equals `1`, executes modules
+in topological order, and passes intermediate states along edges.
+The execution trajectory on task `tau` is `xi = (s_0, G_0, a_0, ..., s_T)`,
+with binary outcome `r(xi, tau)` in `{0, 1}`.
 
 The empirical performance of body plan
 $\mathcal{B} = (\mathcal{O}, \mathcal{E})$ on cluster $\mathcal{T}_c$ is:
@@ -110,8 +107,8 @@ and updates the body plan.
 
 ### Failure Diagnosis
 
-For each failure trajectory $\xi^{(m)}$ we compute a structured descriptor
-$d^{(m)} = \psi(\xi^{(m)}) \in \mathbb{R}^D$ decomposed as:
+For each failure trajectory `xi^(m)` we compute a structured descriptor
+`d^(m) = psi(xi^(m))`, a `D`-dimensional vector decomposed as:
 
 $$
     d^{(m)} = \left[ d_\text{topo}^{(m)},\; d_\text{timing}^{(m)},\;
@@ -162,13 +159,13 @@ The primary module families are:
 - Tool triage
 - Recovery handler
 
-Each proposal is a five-tuple
-$\rho_c = (\hat{o}_c,\; \hat{\phi}_c,\; v_c,\; \mathcal{S}_c,\; \Lambda_c)$,
-where $\hat{o}_c$ is the candidate module,
-$\hat{\phi}_c$ the proposed activation function,
-$v_c$ the insertion vertex,
-$\mathcal{S}_c$ the applicable task scope,
-and $\Lambda_c$ the lifecycle policy.
+Each proposal is a five-part record:
+`rho_c = (o_hat_c, phi_hat_c, v_c, S_c, Lambda_c)`,
+where `o_hat_c` is the candidate module,
+`phi_hat_c` the proposed activation function,
+`v_c` the insertion vertex,
+`S_c` the applicable task scope,
+and `Lambda_c` the lifecycle policy.
 
 Harness integration supports four graph-surgery primitives:
 
@@ -191,8 +188,8 @@ $$
 $$
 
 penalizing latency overhead. A proposal is accepted when
-$\hat{U}(\rho_c) > \eta$ and the regression rate
-$\hat{R}_\text{reg}(\rho_c) \leq \epsilon_\text{reg}$
+`U_hat(rho_c) > eta` and the regression rate
+`R_hat_reg(rho_c) <= epsilon_reg`
 on a held-out set of previously solved tasks.
 
 ### Lifecycle Management
