@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from statistics import mean
 from typing import Any, Dict, Iterable, List, Tuple
 
-from .harness import Harness
-from .modules import ModuleSpec
+from ..core.harness import Harness
+from ..core.modules import ModuleSpec
+from ..core.types import FailureCluster, ReplayResult, Task
+from .evaluators import evaluate_family_result
+from .replay import validate_replay
+from .replay_analysis import analyze_replay_deltas, replay_slice_summary
 from .schemas import schema_template
-from .types import FailureCluster, ReplayResult, Task
+from .surgery import apply_graph_surgery, edge_set_snapshot
 
 
 def _family_for_failure(failure_type: str) -> str:
@@ -44,7 +47,7 @@ def _activation_for_family(family: str):
 def _executor_for_family(family: str):
     if family == "constraint_resolver":
         return lambda state, task, module: {
-            "constraints": {"self_elicited": True},
+            "constraints": {"inferred_locally": True},
             "assumptions": [f"assumption-for-{task.task_id}"],
             "constraint_quality": float(module.params.get("strength", 0.8)),
         }
@@ -78,6 +81,12 @@ class ModuleProposal:
 
 
 class ProposalEngine:
+    def _proposal_family(self, base_harness: Harness, candidate_harness: Harness) -> str:
+        new_names = [name for name in candidate_harness.modules if name not in base_harness.modules]
+        if not new_names:
+            return "verifier"
+        return str(candidate_harness.modules[new_names[-1]].family)
+
     def propose(self, cluster: FailureCluster, index: int = 0) -> ModuleProposal:
         failure_type = str(cluster.signature.get("dominant_failure_type", "answer_error"))
         family = _family_for_failure(failure_type)
@@ -110,34 +119,10 @@ class ProposalEngine:
         )
 
     def integrate(self, harness: Harness, proposal: ModuleProposal) -> Harness:
-        updated = harness.copy()
         module = copy.deepcopy(proposal.module)
-        edges = self._edges_for_insertion(updated, module.name, proposal.insertion_vertex, module.insertion_primitive)
-        updated.add_module(module, edges)
+        updated, edges = apply_graph_surgery(harness, module, proposal.insertion_vertex, module.insertion_primitive)
+        module.lifecycle["edge_snapshot"] = edge_set_snapshot(edges)
         return updated
-
-    def _edges_for_insertion(
-        self,
-        harness: Harness,
-        module_name: str,
-        vertex: str,
-        primitive: str,
-    ) -> List[Tuple[str, str]]:
-        outgoing = [dst for src, dst in harness.edges if src == vertex]
-        incoming = [src for src, dst in harness.edges if dst == vertex]
-        if primitive == "pre-insert":
-            for src in incoming:
-                harness.edges.remove((src, vertex))
-            edges = [(src, module_name) for src in incoming] + [(module_name, vertex)]
-        elif primitive == "post-insert":
-            for dst in outgoing:
-                harness.edges.remove((vertex, dst))
-            edges = [(vertex, module_name)] + [(module_name, dst) for dst in outgoing]
-        elif primitive == "guard-insert":
-            edges = incoming and [(incoming[0], module_name), (module_name, vertex)] or [(module_name, vertex)]
-        else:  # branch-insert
-            edges = [(vertex, module_name), (module_name, "respond")]
-        return edges
 
     def validate(
         self,
@@ -149,32 +134,43 @@ class ProposalEngine:
         utility_threshold: float = 0.02,
         regression_threshold: float = 0.20,
     ) -> ReplayResult:
-        replay_list = list(replay_tasks)
-        solved_list = list(solved_tasks)
-        if not replay_list:
-            return ReplayResult(utility=0.0, regression_rate=0.0, accepted=False, details={"replay_count": 0, "solved_count": len(solved_list)})
-        base_scores = [base_harness.execute(task).outcome for task in replay_list]
-        cand_scores = [candidate_harness.execute(task).outcome for task in replay_list]
-        base_latency = [
-            sum(step.latency_ms for step in base_harness.execute(task).steps)
-            for task in replay_list
-        ]
-        cand_latency = [
-            sum(step.latency_ms for step in candidate_harness.execute(task).steps)
-            for task in replay_list
-        ]
-        score_delta = [cand - base for cand, base in zip(cand_scores, base_scores)]
-        latency_delta = [cand - base for cand, base in zip(cand_latency, base_latency)]
-        utility = float(mean(score_delta)) - latency_penalty * float(mean(latency_delta))
-        regressions = 0
-        for task in solved_list:
-            if base_harness.execute(task).outcome == 1 and candidate_harness.execute(task).outcome == 0:
-                regressions += 1
-        regression_rate = regressions / max(1, len(solved_list))
-        accepted = utility > utility_threshold and regression_rate <= regression_threshold
+        replay_diag = validate_replay(
+            base_harness=base_harness,
+            candidate_harness=candidate_harness,
+            replay_tasks=replay_tasks,
+            solved_tasks=solved_tasks,
+            latency_penalty=latency_penalty,
+        )
+        replay_result = ReplayResult(
+            utility=replay_diag.utility,
+            regression_rate=replay_diag.regression_rate,
+            accepted=False,
+            details=replay_diag.to_dict(),
+        )
+        proposal_family = self._proposal_family(base_harness, candidate_harness)
+        family_eval = evaluate_family_result(
+            proposal_family,
+            replay_result=replay_result,
+            utility_threshold=utility_threshold,
+            regression_threshold=regression_threshold,
+        )
+        replay_slice = analyze_replay_deltas(replay_diag.per_task_delta or [])
         return ReplayResult(
-            utility=utility,
-            regression_rate=regression_rate,
-            accepted=accepted,
-            details={"replay_count": len(replay_list), "solved_count": len(solved_list)},
+            utility=family_eval.adjusted_utility,
+            regression_rate=replay_diag.regression_rate,
+            accepted=family_eval.accepted,
+            details={
+                **replay_diag.to_dict(),
+                "family_evaluation": family_eval.to_dict(),
+                "replay_slice": replay_slice_summary(replay_slice),
+            },
+            decision_trace=[
+                {
+                    "utility_threshold": utility_threshold,
+                    "regression_threshold": regression_threshold,
+                    "latency_penalty": latency_penalty,
+                    "accepted": family_eval.accepted,
+                    "family_evaluation": family_eval.to_dict(),
+                }
+            ],
         )

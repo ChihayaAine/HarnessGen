@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Dict, Sequence
 
-from .development import CycleReport
-from .types import Trajectory
+from ..core.types import Trajectory
 
 
 @dataclass
@@ -21,7 +20,7 @@ class EvaluationReport:
         return asdict(self)
 
 
-def evaluate_development(benchmark_name: str, reports: Sequence[CycleReport]) -> EvaluationReport:
+def evaluate_development(benchmark_name: str, reports: Sequence[object]) -> EvaluationReport:
     if not reports:
         return EvaluationReport(
             benchmark_name=benchmark_name,

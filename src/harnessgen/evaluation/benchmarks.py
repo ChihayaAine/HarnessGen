@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from .types import Task
+from ..core.types import Task
 
 
 FAILURE_MODES = (

@@ -133,9 +133,7 @@ budget. The procedure is prohibited from inserting new modules or altering
 graph topology.
 
 A cluster is a structural-gap candidate when the residual failure gap
-$$
-\Delta_c = \epsilon_{\text{struct}} - R(\mathcal{B}_k, \hat{\Theta}_{\mathcal{R}}^{(c)}, \mathcal{T}_c)
-$$
+`Delta_c = epsilon_struct - R(B_k, Theta_hat_R^(c), T_c)`
 is positive *and* the cluster is persistent:
 
 $$

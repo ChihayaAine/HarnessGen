@@ -28,6 +28,9 @@ class ModuleEvent:
     success: bool
     error_code: Optional[str] = None
     notes: Dict[str, Any] = field(default_factory=dict)
+    activation_score: float = 0.0
+    threshold: float = 0.0
+    missing_inputs: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -53,6 +56,7 @@ class FailureCluster:
     center: List[float]
     stable_cycles: int = 1
     signature: Dict[str, Any] = field(default_factory=dict)
+    lineage_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -64,6 +68,7 @@ class ReplayResult:
     regression_rate: float
     accepted: bool
     details: Dict[str, Any] = field(default_factory=dict)
+    decision_trace: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

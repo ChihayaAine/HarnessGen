@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Dict, Iterable, List, Sequence, Tuple
 
-from .harness import Harness
-from .types import Task, Trajectory
+from ..core.harness import Harness
+from ..core.types import Task, Trajectory
 
 
 @dataclass
@@ -13,6 +13,8 @@ class RecalibrationResult:
     harness: Harness
     score: float
     attempted_updates: List[Dict[str, float]]
+    search_score: float = 0.0
+    selection_score: float = 0.0
 
 
 class Recalibrator:
@@ -28,22 +30,38 @@ class Recalibrator:
             return RecalibrationResult(harness=harness.copy(), score=0.0, attempted_updates=[])
 
         tasks = [item.task for item in cluster_failures]
-        search_tasks, _, holdout_tasks = self._split(tasks)
+        search_tasks, selection_tasks, holdout_tasks = self._split(tasks)
         candidates = self._candidate_updates(cluster_failures)[: self.max_steps]
         best_harness = harness.copy()
         best_score = self._evaluate(best_harness, holdout_tasks)
+        best_search_score = self._evaluate(best_harness, search_tasks)
+        best_selection_score = self._evaluate(best_harness, selection_tasks)
         attempted: List[Dict[str, float]] = []
         for update in candidates:
             candidate = harness.copy()
             for module_name, params in update.items():
                 candidate.modules[module_name].params.update(params)
             score = self._evaluate(candidate, search_tasks)
-            attempted.append({f"{module}.{key}": value for module, params in update.items() for key, value in params.items()})
-            if score >= best_score:
-                best_score = score
+            selection_score = self._evaluate(candidate, selection_tasks)
+            attempted.append(
+                {
+                    **{f"{module}.{key}": value for module, params in update.items() for key, value in params.items()},
+                    "search_score": score,
+                    "selection_score": selection_score,
+                }
+            )
+            if (selection_score, score) >= (best_selection_score, best_search_score):
+                best_search_score = score
+                best_selection_score = selection_score
                 best_harness = candidate
         holdout_score = self._evaluate(best_harness, holdout_tasks)
-        return RecalibrationResult(harness=best_harness, score=holdout_score, attempted_updates=attempted)
+        return RecalibrationResult(
+            harness=best_harness,
+            score=holdout_score,
+            attempted_updates=attempted,
+            search_score=best_search_score,
+            selection_score=best_selection_score,
+        )
 
     def _split(self, tasks: Sequence[Task]) -> Tuple[List[Task], List[Task], List[Task]]:
         if len(tasks) < 4:
@@ -70,11 +88,15 @@ class Recalibrator:
             {"plan": {"prompt_strength": 0.65}},
             {"act": {"tool_policy_strength": 0.55}},
             {"act": {"tool_policy_strength": 0.65}},
+            {"plan": {"activation_threshold": 0.45}},
+            {"act": {"activation_threshold": 0.45}},
         ]
         if dominant == "answer_error":
-            updates.extend([{"plan": {"prompt_strength": 0.75}}, {"act": {"tool_policy_strength": 0.5}}])
+            updates.extend([{"plan": {"prompt_strength": 0.75}}, {"act": {"tool_policy_strength": 0.5}}, {"respond": {"verification_quality": 0.75}}])
         elif dominant == "tool_error":
-            updates.extend([{"act": {"tool_policy_strength": 0.75}}, {"plan": {"prompt_strength": 0.5}}])
+            updates.extend([{"act": {"tool_policy_strength": 0.75}}, {"plan": {"prompt_strength": 0.5}}, {"act": {"activation_threshold": 0.35}}])
         elif dominant == "ambiguous_goal":
-            updates.extend([{"plan": {"prompt_strength": 0.7}}, {"plan": {"activation_threshold": 0.0}}])
+            updates.extend([{"plan": {"prompt_strength": 0.7}}, {"plan": {"activation_threshold": 0.0}}, {"observe": {"prompt_strength": 0.6}}])
+        elif dominant == "subgoal_stall":
+            updates.extend([{"act": {"tool_policy_strength": 0.7}}, {"respond": {"activation_threshold": 0.3}}])
         return updates

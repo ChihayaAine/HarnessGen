@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Any, Dict, List, Sequence, Tuple
 
-from .types import FailureCluster, Trajectory
+from ..core.types import FailureCluster, Trajectory
 
 
 def _l2_distance(a: List[float], b: List[float]) -> float:
@@ -14,6 +14,7 @@ def _l2_distance(a: List[float], b: List[float]) -> float:
 @dataclass
 class DiagnosisState:
     previous_clusters: List[FailureCluster]
+    lineage_counter: int = 0
 
 
 class FailureDiagnoser:
@@ -28,6 +29,9 @@ class FailureDiagnoser:
         latencies = [step.latency_ms for step in trajectory.steps]
         errors = sum(1 for step in trajectory.steps if not step.success)
         tool_errors = sum(1 for step in trajectory.steps if step.error_code and "tool" in step.error_code)
+        verification_failures = sum(1 for step in trajectory.steps if step.family == "verifier" and not step.success)
+        missing_input_failures = sum(1 for step in trajectory.steps if step.error_code and step.error_code.startswith("missing:"))
+        activated_count = sum(activated)
         state = trajectory.final_state
         mode = trajectory.task.metadata["failure_mode"]
         mode_map = {
@@ -41,6 +45,9 @@ class FailureDiagnoser:
         vector = activated + latencies + [
             errors,
             tool_errors,
+            verification_failures,
+            missing_input_failures,
+            activated_count,
             len(state.get("history", [])),
             float(state.get("plan_quality", 0.0)),
             float(state.get("tool_quality", 0.0)),
@@ -48,6 +55,7 @@ class FailureDiagnoser:
             float(state.get("verification_quality", 0.0)),
             float(state.get("constraint_quality", 0.0)),
             float(state.get("recovery_quality", 0.0)),
+            float(sum(step.activation_score for step in trajectory.steps) / max(1, len(trajectory.steps))),
             float(trajectory.outcome),
         ] + mode_map
         return vector
@@ -90,16 +98,29 @@ class FailureDiagnoser:
         dominant_failure = max(set(failure_types), key=failure_types.count) if failure_types else "unknown_failure"
         avg_latency = float(mean([sum(step.latency_ms for step in item.steps) for item in items]))
         avg_context = float(mean([item.task.metadata.get("context_load", 0) for item in items]))
+        avg_tool_pressure = float(mean([item.task.metadata.get("tool_pressure", 0) for item in items]))
+        avg_missing_inputs = float(
+            mean(
+                [
+                    sum(1 for step in item.steps if step.error_code and step.error_code.startswith("missing:"))
+                    for item in items
+                ]
+            )
+        )
         return {
             "dominant_failure_type": dominant_failure,
             "avg_latency_ms": avg_latency,
             "avg_context_load": avg_context,
+            "avg_tool_pressure": avg_tool_pressure,
+            "avg_missing_inputs": avg_missing_inputs,
             "size": len(items),
         }
 
     def _match_clusters(self, current: List[FailureCluster]) -> None:
         previous = self.state.previous_clusters
         if not previous or not current:
+            for cluster in current:
+                cluster.lineage_id = self._next_lineage_id()
             self.state.previous_clusters = current
             return
         matched_current = set()
@@ -115,8 +136,14 @@ class FailureDiagnoser:
                     best_idx = idx
             if best_idx is not None:
                 current[best_idx].stable_cycles = prev_cluster.stable_cycles + 1
+                current[best_idx].lineage_id = prev_cluster.lineage_id or self._next_lineage_id()
                 matched_current.add(best_idx)
         for idx, cluster in enumerate(current):
             if idx not in matched_current:
                 cluster.stable_cycles = 1
+                cluster.lineage_id = self._next_lineage_id()
         self.state.previous_clusters = current
+
+    def _next_lineage_id(self) -> str:
+        self.state.lineage_counter += 1
+        return f"cluster-lineage-{self.state.lineage_counter}"

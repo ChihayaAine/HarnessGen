@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from statistics import mean
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
-from .harness import Harness
-from .types import Task
+from ..core.harness import Harness
+from ..core.types import Task
+from .signals import SignalTracker
 
 
 class LifecycleManager:
@@ -12,29 +13,33 @@ class LifecycleManager:
         self.beta = beta
         self.gamma = gamma
         self.epsilon_prune = epsilon_prune
-        self.utility_state: Dict[str, float] = {}
-        self.low_utility_windows: Dict[str, int] = {}
+        self.signal_tracker = SignalTracker(beta=beta)
 
     def update(self, harness: Harness, tasks: Iterable[Task]) -> List[str]:
         pruned: List[str] = []
+        task_list = list(tasks)
         for module in list(harness.modules.values()):
             if module.constitutional:
                 continue
-            alpha = self._counterfactual_utility(harness, module.name, tasks)
-            prev = self.utility_state.get(module.name, 0.0)
-            utility = (1 - self.beta) * prev + self.beta * alpha
-            self.utility_state[module.name] = utility
-            if utility < module.lifecycle.get("u_min", 0.02):
-                self.low_utility_windows[module.name] = self.low_utility_windows.get(module.name, 0) + 1
-            else:
-                self.low_utility_windows[module.name] = 0
-            if self.low_utility_windows[module.name] == 1:
+            alpha = self._counterfactual_utility(harness, module.name, task_list)
+            signal = self.signal_tracker.update(module.name, alpha, module.lifecycle.get("u_min", 0.02))
+            module.lifecycle["utility"] = signal.utility
+            module.lifecycle["signal_stage"] = signal.stage
+            module.lifecycle["last_alpha"] = signal.last_alpha
+            module.lifecycle["max_utility"] = signal.max_utility
+            module.lifecycle["utility_history"] = signal.history[-8:]
+            if signal.low_utility_windows == 1:
                 module.params["activation_threshold"] = min(0.95, module.threshold() / self.gamma)
-            elif self.low_utility_windows[module.name] == 2:
+                signal.stage = "activation_decay"
+            elif signal.low_utility_windows == 2:
                 module.lifecycle["shadow_mode"] = True
-            elif self.low_utility_windows[module.name] >= module.lifecycle.get("window", 2) + 1 and utility <= self.epsilon_prune:
+                signal.stage = "shadow"
+            elif signal.low_utility_windows >= module.lifecycle.get("window", 2) + 1 and signal.utility <= self.epsilon_prune:
                 harness.remove_module(module.name)
                 pruned.append(module.name)
+                signal.stage = "pruned"
+            else:
+                module.lifecycle["shadow_mode"] = bool(module.lifecycle.get("shadow_mode", False))
         return pruned
 
     def _counterfactual_utility(self, harness: Harness, module_name: str, tasks: Iterable[Task]) -> float:

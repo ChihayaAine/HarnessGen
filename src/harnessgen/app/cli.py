@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 
-from .benchmarks import load_benchmark_dataset
-from .development import DevelopmentConfig
-from .runner import run_experiment, write_artifacts
+from ..development.engine import DevelopmentConfig
+from ..evaluation.benchmarks import load_benchmark_dataset
+from ..evaluation.runner import run_experiment, write_artifacts
 
 
 def build_parser() -> argparse.ArgumentParser:
