@@ -65,7 +65,9 @@ Each module $o_i$ is a typed tuple
 or composite routine.
 Each activation function $\phi_i: \mathcal{S} \rightarrow [0,1]$ is
 thresholded deterministically at evaluation time as
-$b_i^t = \mathbf{1}[\phi_i(s_t) \geq \theta_i^{\mathrm{act}}]$,
+$$
+b_i^t = \mathbf{1}[\phi_i(s_t) \geq \theta_i^{\text{act}}]
+$$
 unifying mandatory and conditionally activated modules within the same
 framework.
 
@@ -134,7 +136,9 @@ budget. The procedure is prohibited from inserting new modules or altering
 graph topology.
 
 A cluster is a structural-gap candidate when the residual failure gap
-$\Delta_c = \epsilon_\text{struct} - R(\mathcal{B}_k, \hat{\Theta}_\mathcal{R}^{(c)}, \mathcal{T}_c)$
+$$
+\Delta_c = \epsilon_\text{struct} - R(\mathcal{B}_k, \hat{\Theta}_\mathcal{R}^{(c)}, \mathcal{T}_c)
+$$
 is positive *and* the cluster is persistent:
 
 $$
