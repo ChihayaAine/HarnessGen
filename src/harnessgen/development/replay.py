@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from statistics import mean
 from typing import Dict, Iterable, List
+
+import numpy as np
 
 from ..core.harness import Harness
 from ..core.types import Task
@@ -80,13 +81,13 @@ def validate_replay(
     for task in solved_list:
         if base_harness.execute(task, seed=17).outcome == 1 and candidate_harness.execute(task, seed=17).outcome == 0:
             regressions += 1
-    utility = float(mean(score_delta)) - latency_penalty * float(mean(latency_delta))
+    utility = float(np.mean(score_delta)) - latency_penalty * float(np.mean(latency_delta))
     return ReplayDiagnostics(
         utility=utility,
         regression_rate=regressions / max(1, len(solved_list)),
-        latency_delta_ms=float(mean(latency_delta)),
-        base_pass_rate=float(mean(base_scores)),
-        candidate_pass_rate=float(mean(cand_scores)),
+        latency_delta_ms=float(np.mean(latency_delta)),
+        base_pass_rate=float(np.mean(base_scores)),
+        candidate_pass_rate=float(np.mean(cand_scores)),
         replay_count=len(replay_list),
         solved_count=len(solved_list),
         per_task_delta=per_task_delta,

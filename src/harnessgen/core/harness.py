@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import copy
 import time
-from collections import defaultdict, deque
 from typing import Any, Dict, Iterable, List, Tuple
+
+import networkx as nx
 
 from .modules import ModuleSpec
 from .types import ModuleEvent, Task, Trajectory
@@ -26,24 +27,13 @@ class Harness:
         )
 
     def topological_order(self) -> List[str]:
-        indegree = defaultdict(int)
-        graph = defaultdict(list)
+        graph = nx.DiGraph()
+        graph.add_nodes_from(self.modules.keys())
         for src, dst in self.edges:
-            graph[src].append(dst)
-            indegree[dst] += 1
-            indegree.setdefault(src, 0)
-        queue = deque(sorted(name for name in self.modules if indegree[name] == 0))
-        order: List[str] = []
-        while queue:
-            node = queue.popleft()
-            order.append(node)
-            for nxt in graph[node]:
-                indegree[nxt] -= 1
-                if indegree[nxt] == 0:
-                    queue.append(nxt)
-        if len(order) != len(self.modules):
+            graph.add_edge(src, dst)
+        if not nx.is_directed_acyclic_graph(graph):
             raise HarnessExecutionError("Harness graph contains a cycle.")
-        return order
+        return list(nx.lexicographical_topological_sort(graph))
 
     def _validate_acyclic(self) -> None:
         self.topological_order()

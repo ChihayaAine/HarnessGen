@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import mean
 from typing import Any, Dict, List, Sequence, Tuple
+
+import numpy as np
 
 from ..core.types import FailureCluster, Trajectory
 
 
 def _l2_distance(a: List[float], b: List[float]) -> float:
-    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+    return float(np.linalg.norm(np.asarray(a, dtype=float) - np.asarray(b, dtype=float)))
 
 
 @dataclass
@@ -68,7 +69,7 @@ class FailureDiagnoser:
         clusters: List[FailureCluster] = []
         for label in sorted(set(labels)):
             member_indices = [idx for idx, candidate_label in enumerate(labels) if candidate_label == label]
-            center = [mean(values) for values in zip(*(features[idx] for idx in member_indices))]
+            center = np.mean(np.asarray([features[idx] for idx in member_indices], dtype=float), axis=0).tolist()
             signature = self._signature([failures[idx] for idx in member_indices])
             clusters.append(
                 FailureCluster(
@@ -96,17 +97,13 @@ class FailureDiagnoser:
     def _signature(self, items: Sequence[Trajectory]) -> Dict[str, Any]:
         failure_types = [item.failure_type for item in items if item.failure_type]
         dominant_failure = max(set(failure_types), key=failure_types.count) if failure_types else "unknown_failure"
-        avg_latency = float(mean([sum(step.latency_ms for step in item.steps) for item in items]))
-        avg_context = float(mean([item.task.metadata.get("context_load", 0) for item in items]))
-        avg_tool_pressure = float(mean([item.task.metadata.get("tool_pressure", 0) for item in items]))
-        avg_missing_inputs = float(
-            mean(
-                [
-                    sum(1 for step in item.steps if step.error_code and step.error_code.startswith("missing:"))
-                    for item in items
-                ]
-            )
-        )
+        avg_latency = float(np.mean([sum(step.latency_ms for step in item.steps) for item in items]))
+        avg_context = float(np.mean([item.task.metadata.get("context_load", 0) for item in items]))
+        avg_tool_pressure = float(np.mean([item.task.metadata.get("tool_pressure", 0) for item in items]))
+        avg_missing_inputs = float(np.mean([
+            sum(1 for step in item.steps if step.error_code and step.error_code.startswith("missing:"))
+            for item in items
+        ]))
         return {
             "dominant_failure_type": dominant_failure,
             "avg_latency_ms": avg_latency,
