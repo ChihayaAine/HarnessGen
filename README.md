@@ -14,10 +14,10 @@ that budget. Candidate modules are integrated through schema-constrained
 graph-surgery primitives, validated in sandboxed replay, and managed by an
 atrophy-and-pruning lifecycle that limits structural bloat. Experiments on
 Terminal-Bench 2.0, SWE-bench Verified, SWE-bench Multilingual,
-OSWorld-Verified, and $\tau^2$-Bench show that HarnessGen improves over
+OSWorld-Verified, and tau^2-Bench show that HarnessGen improves over
 recalibration-only and ungated structural-search baselines on the primary
 in-domain benchmarks, outperforms matched-budget harness-search baselines on
-TB2, SWE-bench, and $\tau^2$-Bench, and remains competitive on
+TB2, SWE-bench, and tau^2-Bench, and remains competitive on
 OSWorld-Verified while maintaining low regression on previously solved tasks.
 These results support diagnosis-triggered structural adaptation as a practical
 mechanism for building more adaptive and reliable LLM agent harnesses.
@@ -35,15 +35,15 @@ mechanism for building more adaptive and reliable LLM agent harnesses.
 
 - We evaluate HarnessGen on Terminal-Bench 2.0,
   SWE-bench Verified, SWE-bench Multilingual, OSWorld-Verified, and
-  $\tau^2$-Bench Telecom, showing that diagnosis-triggered structural
+  tau^2-Bench Telecom, showing that diagnosis-triggered structural
   adaptation improves over recalibration-only and ungated graph-search
   baselines on the primary in-domain benchmarks, outperforms harness-search
-  baselines on TB2, SWE-bench, and $\tau^2$-Bench, and remains competitive on
+  baselines on TB2, SWE-bench, and tau^2-Bench, and remains competitive on
   OSWorld-Verified.
 
 ## HarnessGen
 
-![HarnessGen Framework](resource/HarnessGen.pdf)
+![HarnessGen Framework](resource/HarnessGen.png)
 
 ## Methodology
 
@@ -55,9 +55,9 @@ each agent step; the outer observe--act loop remains a separate recurrent
 structure.
 
 Formally, $\mathcal{H} = (\mathcal{O}, \mathcal{E}, \Theta, \Phi)$,
-where $\mathcal{O}$ is the module set,
-$\mathcal{E} \subseteq \mathcal{O} \times \mathcal{O}$ the directed edge set,
-$\Theta$ module-level parameters, and $\Phi$ activation functions.
+where $\mathcal{O}$ is the module set, $\mathcal{E}$ is the directed edge set,
+`Theta` contains module-level parameters, and $\Phi$ contains activation
+functions. The edge set satisfies $\mathcal{E} \subseteq \mathcal{O} \times \mathcal{O}$.
 Each module $o_i$ is a typed tuple
 (`name`, `input_schema`, `output_schema`,
 `executor`, `side_effects`, `budget`), where
@@ -82,7 +82,7 @@ The empirical performance of body plan
 $\mathcal{B} = (\mathcal{O}, \mathcal{E})$ on cluster $\mathcal{T}_c$ is:
 
 $$
-    R(\mathcal{B}, \Theta, \mathcal{T}_c) = \frac{1}{|\mathcal{T}_c|}
+    R(\mathcal{B}, \text{Theta}, \mathcal{T}_c) = \frac{1}{|\mathcal{T}_c|}
     \sum_{\tau \in \mathcal{T}_c}
     \mathbb{E}_{\xi \sim \mathcal{H}(\tau)}\left[ r(\xi, \tau) \right].
 $$
@@ -126,7 +126,7 @@ error codes, and terminal failure type.
 Clusters at cycle $k$ are matched to those at cycle $k-1$ via the Hungarian
 algorithm on symmetric KL divergences between fitted Gaussian components.
 A cluster is *persistent* if a matched descendant has been non-empty for
-$\kappa$ consecutive cycles.
+`kappa` consecutive cycles.
 
 For each cluster we execute the *bounded recalibration test*, a
 structured search over parameter space of existing modules---including
@@ -137,7 +137,7 @@ graph topology.
 
 A cluster is a structural-gap candidate when the residual failure gap
 $$
-\Delta_c = \epsilon_\text{struct} - R(\mathcal{B}_k, \hat{\Theta}_\mathcal{R}^{(c)}, \mathcal{T}_c)
+\Delta_c = \epsilon_{\text{struct}} - R(\mathcal{B}_k, \hat{\Theta}_{\mathcal{R}}^{(c)}, \mathcal{T}_c)
 $$
 is positive *and* the cluster is persistent:
 
